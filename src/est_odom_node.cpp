@@ -11,7 +11,6 @@ tf2::Quaternion q_inv(tf2::Quaternion q);
 
 ros::Subscriber gt_sub;
 ros::Publisher est_odom;
-ros::Publisher imu_rot;
 nav_msgs::Odometry last_gt_msg;
 nav_msgs::Odometry new_msg;
 bool est_odom_unavail = true;
@@ -113,57 +112,6 @@ void est_odom_callback(const nav_msgs::Odometry &msg){
   }
 }
 
-void imu_odom_callback(const sensor_msgs::Imu &msg){ // original
-  if(!first_rovio_callback){
-    nav_msgs::Odometry rovio_msg = new_msg;
-    tf2::Quaternion IB_q = tf2::Quaternion(0.0, 0.38268, 0.0, -0.92388); // tf quaternion [x,y,z,w] for rotation from imu to quad body (45 deg about y-axis)
-    tf2::Quaternion sWI_q, rovio_sWI_q;
-    tf2::fromMsg(msg.orientation, sWI_q);
-    tf2::Quaternion sWB_q = q_mult(IB_q, sWI_q); // rotate sW x-axis by IB_q, then by sWI_q
-
-    tf2::Matrix3x3 RotMat(sWB_q);
-    double imu_roll, imu_pitch, imu_yaw;
-    RotMat.getRPY(imu_roll, imu_pitch, imu_yaw); // roll, pitch and yaw given imu orientation
-
-    tf2::fromMsg(rovio_msg.pose.pose.orientation, rovio_sWI_q);
-    tf2::Matrix3x3 rovio_RotMat(rovio_sWI_q);
-    double rovio_roll, rovio_pitch, rovio_yaw;
-    rovio_RotMat.getRPY(rovio_roll, rovio_pitch, rovio_yaw); // roll, pitch and yaw given Rovio orientation
-
-    sWB_q.setRPY(imu_roll, imu_pitch, rovio_yaw); // roll and pitch from imu, but yaw from Rovio
-    rovio_msg.pose.pose.orientation = tf2::toMsg(sWB_q);
-
-    tf2::Vector3 angVel;
-    tf2::fromMsg(msg.angular_velocity, angVel); // load angVel with data
-    rovio_msg.twist.twist.angular = tf2::toMsg(quatRotate(IB_q.inverse(), angVel)); // rotate the angular velocity as well
-    est_odom.publish(rovio_msg); //original
-  }
-}
-
-// This function remaps the imu data from the camera coordinate frame to the quad body coordinate frame
-void imu_callback(const sensor_msgs::Imu &msg){ // original
-  sensor_msgs::Imu imu_msg = msg;
-  tf2::Quaternion IB_q = tf2::Quaternion(0.0, 0.38268, 0.0, -0.92388); // tf quaternion [x,y,z,w] for rotation from imu to quad body (45 deg about y-axis)
-
-  // rotate orientation
-  tf2::Quaternion sWI_q;
-  tf2::fromMsg(msg.orientation, sWI_q);
-  tf2::Quaternion sWB_q = q_mult(IB_q, sWI_q); // rotate sW x-axis by IB_q, then by sWI_q
-  imu_msg.orientation = tf2::toMsg(sWB_q);
-
-  // rotate angular velocity
-  tf2::Vector3 angVel;
-  tf2::fromMsg(msg.angular_velocity, angVel); // load angVel with data
-  imu_msg.angular_velocity = tf2::toMsg(quatRotate(IB_q.inverse(), angVel)); // rotate the angular velocity
-
-  // rotate linear acceleration
-  tf2::Vector3 linAcc;
-  tf2::fromMsg(msg.linear_acceleration, linAcc); // load angVel with data
-  imu_msg.linear_acceleration = tf2::toMsg(quatRotate(IB_q.inverse(), linAcc)); // rotate the linear acceleration
-
-  imu_rot.publish(imu_msg);
-}
-
 tf2::Quaternion q_mult(tf2::Quaternion q2, tf2::Quaternion q1){
   // return quaternion multiplication to rotate with q2, then q1
   // (i.e. Hamilton product)
@@ -179,12 +127,8 @@ int main(int argc, char **argv){
   ros::init(argc, argv, "est_odom_node");
   ros::NodeHandle n;
   est_odom = n.advertise<nav_msgs::Odometry>("/est_odometry", 1);
-  //imu_rot = n.advertise<sensor_msgs::Imu>("/imu_rotated", 1);
   gt_sub = n.subscribe("/hummingbird/ground_truth/odometry", 1, ground_truth_callback, ros::TransportHints().tcpNoDelay());
-  //ros::Subscriber rovio_sub = n.subscribe("/rovio/odometry", 1, est_odom_callback, ros::TransportHints().tcpNoDelay());
   ros::Subscriber rovio_imuInt_sub = n.subscribe("/odom_predictor_node/imu_integrated_odometry", 1, est_odom_callback, ros::TransportHints().tcpNoDelay());
-  //ros::Subscriber imu_odom_sub = n.subscribe("/hummingbird/vi_sensor/imu", 1, imu_odom_callback, ros::TransportHints().tcpNoDelay());
-  //ros::Subscriber imu_sub = n.subscribe("/hummingbird/vi_sensor/imu", 1, imu_callback, ros::TransportHints().tcpNoDelay());
 
   ros::MultiThreadedSpinner spinner(2); // Use a threads for each subscriber
   spinner.spin();
