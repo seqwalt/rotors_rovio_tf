@@ -5,6 +5,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <chrono>
 #include <thread>
+#include <string>
 
 tf2::Quaternion q_mult(tf2::Quaternion q2, tf2::Quaternion q1);
 tf2::Quaternion q_inv(tf2::Quaternion q);
@@ -15,6 +16,7 @@ nav_msgs::Odometry last_gt_msg;
 nav_msgs::Odometry new_msg;
 bool est_odom_unavail = true;
 bool first_gt_callback = true;
+std::string frame_gt;
 bool first_rovio_callback = true;
 float rovio_start_time;
 bool do_once = true;
@@ -29,6 +31,7 @@ void ground_truth_callback(const nav_msgs::Odometry &msg){
   if (est_odom_unavail){
     if (first_gt_callback){
       first_gt_callback = false;
+      frame_gt = msg.header.frame_id;
       ROS_INFO("Using Ground Truth");
     }
     est_odom.publish(msg);
@@ -102,6 +105,7 @@ void est_odom_callback(const nav_msgs::Odometry &msg){
     // ----------------------------------------------------------------
 
     // publish msg
+    new_msg.header.frame_id = frame_gt; // update to frame_id used in ground truth odometry
     est_odom.publish(new_msg);
 
   }
@@ -122,7 +126,7 @@ int main(int argc, char **argv){
   ros::init(argc, argv, "est_odom_node");
   ros::NodeHandle n;
   est_odom = n.advertise<nav_msgs::Odometry>("/est_odometry", 1);
-  gt_sub = n.subscribe("/hummingbird/ground_truth/odometry", 1, ground_truth_callback, ros::TransportHints().tcpNoDelay());
+  gt_sub = n.subscribe("/mocap_node/vioquad/odom", 1, ground_truth_callback, ros::TransportHints().tcpNoDelay());
   ros::Subscriber rovio_imuInt_sub = n.subscribe("/odom_predictor_node/imu_integrated_odometry", 1, est_odom_callback, ros::TransportHints().tcpNoDelay());
 
   ros::MultiThreadedSpinner spinner(2); // Use a threads for each subscriber

@@ -3,7 +3,7 @@
 2. Provides a transformation from the original rovio odometry to the quadrotor body-frame odometry
 
 # Usage:  
-```rosrun rotors_rovio_tf est_odom_node.cpp```
+```rosrun rotors_rovio_tf est_odom_node```
 
 # Dependencies:  
 odom_predictor (link coming soon)
